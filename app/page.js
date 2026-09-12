@@ -1,10 +1,15 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import Court from "./components/Court";
 import StepControls from "./components/StepControls";
+import StepMemo from "./components/StepMemo";
 import CloudControls from "./components/CloudControls";
 import { INITIAL_PLAYERS } from "./lib/initialPlayers";
+import { normalizeSteps, createStep } from "./lib/steps";
+import { movementArrows } from "./lib/arrows";
+
+const PLAY_INTERVAL_MS = 1200;
 
 function clonePlayers(players) {
   return players.map((p) => ({ ...p }));
@@ -13,51 +18,61 @@ function clonePlayers(players) {
 export default function Home() {
   // Current player positions on the court (always editable)
   const [players, setPlayers] = useState(clonePlayers(INITIAL_PLAYERS));
-  // Recorded steps (starts empty, populated by pressing "+")
+  // Recorded steps: [{ players, memo }]
   const [steps, setSteps] = useState([]);
   const [currentStep, setCurrentStep] = useState(null);
   const [isAnimating, setIsAnimating] = useState(false);
+  const [showArrows, setShowArrows] = useState(true);
+  // 読み込み中の戦術（id/name/category/description）。上書き保存用
+  const [loadedTactic, setLoadedTactic] = useState(null);
   const courtRef = useRef(null);
+
+  const applyLoaded = useCallback((rawSteps, meta) => {
+    const normalized = normalizeSteps(rawSteps);
+    if (normalized.length === 0) return;
+    setSteps(normalized);
+    setLoadedTactic(meta);
+    setPlayers(clonePlayers(normalized[0].players));
+    setCurrentStep(0);
+  }, []);
 
   // Load tactic from URL query param on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const id = params.get("id");
-    if (id) {
-      fetch(`/api/tactics/${id}`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.steps && data.steps.length > 0) {
-            setSteps(data.steps);
-            setPlayers(clonePlayers(data.steps[0]));
-            setCurrentStep(0);
-          }
-        })
-        .catch(() => {});
-    }
-  }, []);
+    if (!id) return;
+    fetch(`/api/tactics/${id}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.steps) {
+          applyLoaded(data.steps, {
+            id,
+            name: data.name,
+            category: data.category || "other",
+            description: data.description || "",
+          });
+        }
+      })
+      .catch(() => {});
+  }, [applyLoaded]);
 
-  const handlePlayerMove = useCallback(
-    (playerId, x, y) => {
-      // ドラッグ中は画面上の位置だけ更新。記録済みステップは触らない
-      setPlayers((prev) =>
-        prev.map((p) => (p.id === playerId ? { ...p, x, y } : p))
-      );
-    },
-    []
-  );
+  const handlePlayerMove = useCallback((playerId, x, y) => {
+    // ドラッグ中は画面上の位置だけ更新。記録済みステップは触らない
+    setPlayers((prev) =>
+      prev.map((p) => (p.id === playerId ? { ...p, x, y } : p))
+    );
+  }, []);
 
   const handleAddStep = useCallback(() => {
     // 「+」を押した瞬間の配置をスナップショットとして保存
-    const snapshot = clonePlayers(players);
-    setSteps((prev) => [...prev, snapshot]);
+    setSteps((prev) => [...prev, createStep(players)]);
     // 記録後はフリー編集モード（ステップ選択を解除）
     setCurrentStep(null);
   }, [players]);
 
   const handleDeleteStep = useCallback(
     (index) => {
-      if (steps.length <= 0) return;
+      if (steps.length <= 0 || index === null) return;
       const newSteps = steps.filter((_, i) => i !== index);
       setSteps(newSteps);
       if (newSteps.length === 0) {
@@ -65,7 +80,7 @@ export default function Home() {
       } else {
         const newIndex = Math.min(index, newSteps.length - 1);
         setCurrentStep(newIndex);
-        setPlayers(clonePlayers(newSteps[newIndex]));
+        setPlayers(clonePlayers(newSteps[newIndex].players));
       }
     },
     [steps]
@@ -73,66 +88,70 @@ export default function Home() {
 
   const handleSelectStep = useCallback(
     (index) => {
+      if (index < 0 || index >= steps.length) return;
       setCurrentStep(index);
-      setPlayers(clonePlayers(steps[index]));
+      setPlayers(clonePlayers(steps[index].players));
     },
     [steps]
+  );
+
+  const handleMemoChange = useCallback(
+    (memo) => {
+      if (currentStep === null) return;
+      setSteps((prev) => prev.map((s, i) => (i === currentStep ? { ...s, memo } : s)));
+    },
+    [currentStep]
   );
 
   const handlePlay = useCallback(() => {
     if (steps.length < 2 || isAnimating) return;
     setIsAnimating(true);
     setCurrentStep(0);
-    setPlayers(clonePlayers(steps[0]));
+    setPlayers(clonePlayers(steps[0].players));
 
     let stepIndex = 0;
     const playNext = () => {
       stepIndex++;
       if (stepIndex < steps.length) {
         setCurrentStep(stepIndex);
-        setPlayers(clonePlayers(steps[stepIndex]));
-        setTimeout(playNext, 1200);
+        setPlayers(clonePlayers(steps[stepIndex].players));
+        setTimeout(playNext, PLAY_INTERVAL_MS);
       } else {
         setIsAnimating(false);
       }
     };
 
-    setTimeout(playNext, 1200);
+    setTimeout(playNext, PLAY_INTERVAL_MS);
   }, [steps, isAnimating]);
 
   const handleReset = useCallback(() => {
     setPlayers(clonePlayers(INITIAL_PLAYERS));
     setSteps([]);
     setCurrentStep(null);
-    setLoadedTacticId(null);
-    setLoadedTacticName("");
+    setLoadedTactic(null);
   }, []);
 
-  // 読み込み中の戦術ID・名前を記憶（上書き保存用）
-  const [loadedTacticId, setLoadedTacticId] = useState(null);
-  const [loadedTacticName, setLoadedTacticName] = useState("");
+  // 矢印: 選択中ステップから次ステップへの移動
+  const arrows = useMemo(() => {
+    if (!showArrows || isAnimating || currentStep === null) return [];
+    const next = steps[currentStep + 1];
+    return next ? movementArrows(players, next.players) : [];
+  }, [showArrows, isAnimating, currentStep, steps, players]);
 
-  const handleLoadTactic = useCallback((loadedSteps, name, id) => {
-    setSteps(loadedSteps);
-    setLoadedTacticId(id);
-    setLoadedTacticName(name);
-    if (loadedSteps.length > 0) {
-      setPlayers(clonePlayers(loadedSteps[0]));
-      setCurrentStep(0);
-    }
-  }, []);
+  const memo = currentStep !== null && steps[currentStep] ? steps[currentStep].memo : "";
 
   return (
     <div className="app">
-      {loadedTacticName && (
+      {loadedTactic && (
         <div className="tactic-header">
-          {loadedTacticName}
+          {loadedTactic.name}
         </div>
       )}
 
       <div className="court-wrapper">
         <Court
           players={players}
+          arrows={arrows}
           onPlayerMove={handlePlayerMove}
           isAnimating={isAnimating}
           courtRef={courtRef}
@@ -140,6 +159,9 @@ export default function Home() {
       </div>
 
       <div className="controls-wrapper">
+        {currentStep !== null && (
+          <StepMemo memo={memo} onChange={handleMemoChange} disabled={isAnimating} />
+        )}
         <StepControls
           steps={steps}
           currentStep={currentStep}
@@ -148,13 +170,14 @@ export default function Home() {
           onDeleteStep={handleDeleteStep}
           onPlay={handlePlay}
           onReset={handleReset}
+          showArrows={showArrows}
+          onToggleArrows={() => setShowArrows((v) => !v)}
           isAnimating={isAnimating}
         />
         <CloudControls
           steps={steps}
-          onLoadTactic={handleLoadTactic}
-          loadedTacticId={loadedTacticId}
-          loadedTacticName={loadedTacticName}
+          onLoadTactic={applyLoaded}
+          loadedTactic={loadedTactic}
         />
       </div>
 
@@ -179,10 +202,11 @@ export default function Home() {
         }
         .court-wrapper {
           flex: 1;
+          min-height: 0;
           display: flex;
           align-items: center;
           justify-content: center;
-          padding: 8px;
+          padding: 4px 8px;
           overflow: hidden;
         }
         .controls-wrapper {

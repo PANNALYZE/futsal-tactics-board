@@ -1,11 +1,15 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { CATEGORIES, categoryLabel } from "../lib/steps";
 
 const MAX_TACTICS = 20;
 
-export default function CloudControls({ steps, onLoadTactic, loadedTacticId, loadedTacticName }) {
+export default function CloudControls({ steps, onLoadTactic, loadedTactic }) {
+  const loadedTacticId = loadedTactic ? loadedTactic.id : null;
+  const loadedTacticName = loadedTactic ? loadedTactic.name : "";
   const [tacticName, setTacticName] = useState("");
+  const [tacticCategory, setTacticCategory] = useState("own_kickin");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [isOpen, setIsOpen] = useState(false);
@@ -41,13 +45,23 @@ export default function CloudControls({ steps, onLoadTactic, loadedTacticId, loa
     setSaving(true);
     setMessage("");
     try {
-      await fetch(`/api/tactics/${loadedTacticId}`, {
+      const res = await fetch(`/api/tactics/${loadedTacticId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: loadedTacticName, steps }),
+        body: JSON.stringify({
+          name: loadedTacticName,
+          steps,
+          category: loadedTactic.category,
+          description: loadedTactic.description,
+        }),
       });
-      setMessage(`「${loadedTacticName}」を上書き保存しました`);
-      fetchTactics();
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setMessage(data.error || "保存に失敗しました");
+      } else {
+        setMessage(`「${loadedTacticName}」を上書き保存しました`);
+        fetchTactics();
+      }
     } catch {
       setMessage("保存に失敗しました");
     } finally {
@@ -75,7 +89,7 @@ export default function CloudControls({ steps, onLoadTactic, loadedTacticId, loa
       const res = await fetch("/api/tactics", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: tacticName.trim(), steps }),
+        body: JSON.stringify({ name: tacticName.trim(), steps, category: tacticCategory }),
       });
       const data = await res.json();
       if (data.error) {
@@ -97,7 +111,12 @@ export default function CloudControls({ steps, onLoadTactic, loadedTacticId, loa
       const res = await fetch(`/api/tactics/${tactic.id}`);
       const data = await res.json();
       if (data.steps) {
-        onLoadTactic(data.steps, data.name, tactic.id);
+        onLoadTactic(data.steps, {
+          id: tactic.id,
+          name: data.name,
+          category: data.category || "other",
+          description: data.description || "",
+        });
         setMessage(`「${data.name}」を読み込みました`);
         setIsOpen(false);
       }
@@ -159,6 +178,15 @@ export default function CloudControls({ steps, onLoadTactic, loadedTacticId, loa
 
           {/* 新規保存 */}
           <div className="cloud-section">
+            <select
+              className="cloud-select"
+              value={tacticCategory}
+              onChange={(e) => setTacticCategory(e.target.value)}
+            >
+              {CATEGORIES.map((c) => (
+                <option key={c.key} value={c.key}>{c.label}</option>
+              ))}
+            </select>
             <input
               type="text"
               placeholder="新しい戦術名を入力"
@@ -179,7 +207,13 @@ export default function CloudControls({ steps, onLoadTactic, loadedTacticId, loa
           {tacticsList.length > 0 ? (
             <div className="tactics-list">
               <p className="list-label">保存済みの戦術 ({tacticsList.length}/{MAX_TACTICS}):</p>
-              {tacticsList.map((t) => (
+              {CATEGORIES.map((c) => {
+                const items = tacticsList.filter((t) => (t.category || "other") === c.key);
+                if (items.length === 0) return null;
+                return (
+                  <div key={c.key} className="category-group">
+                    <p className="category-label">{categoryLabel(c.key)}</p>
+                    {items.map((t) => (
                 <div key={t.id}>
                   <div
                     className={`tactic-item ${t.id === loadedTacticId ? "current" : ""}`}
@@ -234,7 +268,10 @@ export default function CloudControls({ steps, onLoadTactic, loadedTacticId, loa
                     )}
                   </div>
                 </div>
-              ))}
+                    ))}
+                  </div>
+                );
+              })}
             </div>
           ) : (
             <p className="cloud-message">まだ保存された戦術はありません</p>
@@ -269,6 +306,21 @@ export default function CloudControls({ steps, onLoadTactic, loadedTacticId, loa
         .cloud-section {
           display: flex;
           gap: 8px;
+        }
+        .cloud-select {
+          padding: 8px 6px;
+          border: 1px solid #4a4a6a;
+          border-radius: 6px;
+          background: #2a2a4a;
+          color: #e0e0e0;
+          font-size: 12px;
+          max-width: 40%;
+        }
+        .category-label {
+          font-size: 12px;
+          font-weight: bold;
+          color: #fbbf24;
+          margin: 8px 0 4px;
         }
         .cloud-input {
           flex: 1;

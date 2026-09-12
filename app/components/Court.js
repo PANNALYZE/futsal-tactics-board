@@ -2,9 +2,11 @@
 
 import { useRef, useCallback } from "react";
 import Player from "./Player";
+import MovementArrows from "./MovementArrows";
 
 export default function Court({
   players,
+  arrows,
   onPlayerMove,
   isAnimating,
   courtRef: externalCourtRef,
@@ -126,6 +128,8 @@ export default function Court({
         <path d="M 10,387 A 3,3 0 0,0 13,390" fill="none" stroke="white" strokeWidth="1.5" />
         <path d="M 187,390 A 3,3 0 0,0 190,387" fill="none" stroke="white" strokeWidth="1.5" />
 
+        {/* 次ステップへの移動（矢印 ON のときだけ） */}
+        <MovementArrows arrows={arrows} />
       </svg>
 
       {/* Players rendered as HTML overlays for better touch handling */}
@@ -144,6 +148,7 @@ export default function Court({
           width: 100%;
           max-width: 400px;
           aspect-ratio: 1 / 2;
+          max-height: 100%;
           margin: 0 auto;
           touch-action: none;
         }

@@ -8,11 +8,24 @@ export default function StepControls({
   onDeleteStep,
   onPlay,
   onReset,
+  showArrows,
+  onToggleArrows,
   isAnimating,
 }) {
+  const hasStep = currentStep !== null && steps.length > 0;
+  const canPrev = hasStep && currentStep > 0;
+  const canNext = hasStep && currentStep < steps.length - 1;
+
   return (
     <div className="step-controls">
       <div className="step-tabs">
+        <button
+          className="step-tab nav-btn"
+          onClick={() => onSelectStep(currentStep - 1)}
+          disabled={isAnimating || !canPrev}
+        >
+          ◀
+        </button>
         {steps.map((_, index) => (
           <button
             key={index}
@@ -30,6 +43,13 @@ export default function StepControls({
         >
           +
         </button>
+        <button
+          className="step-tab nav-btn"
+          onClick={() => onSelectStep(currentStep + 1)}
+          disabled={isAnimating || !canNext}
+        >
+          ▶
+        </button>
       </div>
 
       <div className="action-buttons">
@@ -41,18 +61,25 @@ export default function StepControls({
           {isAnimating ? "再生中..." : "▶ 再生"}
         </button>
         <button
+          className={`action-btn arrow-btn ${showArrows ? "on" : ""}`}
+          onClick={onToggleArrows}
+          disabled={isAnimating}
+        >
+          {showArrows ? "矢印 ON" : "矢印 OFF"}
+        </button>
+        <button
           className="action-btn delete-btn"
           onClick={() => onDeleteStep(currentStep)}
           disabled={isAnimating || steps.length === 0}
         >
-          🗑 削除
+          🗑
         </button>
         <button
           className="action-btn reset-btn"
           onClick={onReset}
           disabled={isAnimating}
         >
-          ↺ リセット
+          ↺
         </button>
       </div>
 
@@ -91,6 +118,14 @@ export default function StepControls({
           border-style: dashed;
           font-size: 18px;
         }
+        .step-tab.nav-btn {
+          background: #0f3460;
+          font-size: 12px;
+        }
+        .step-tab:disabled {
+          opacity: 0.4;
+          cursor: default;
+        }
         .action-buttons {
           display: flex;
           gap: 8px;
@@ -108,23 +143,21 @@ export default function StepControls({
         .play-btn {
           background: #059669;
         }
-        .play-btn:disabled {
-          background: #374151;
-          color: #6b7280;
+        .arrow-btn {
+          background: #4b5563;
+        }
+        .arrow-btn.on {
+          background: #d97706;
         }
         .delete-btn {
           background: #dc2626;
-          flex: 0.7;
-        }
-        .delete-btn:disabled {
-          background: #374151;
-          color: #6b7280;
+          flex: 0.5;
         }
         .reset-btn {
           background: #6b7280;
-          flex: 0.7;
+          flex: 0.5;
         }
-        .reset-btn:disabled {
+        .action-btn:disabled {
           background: #374151;
           color: #6b7280;
         }

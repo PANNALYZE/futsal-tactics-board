@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { supabase } from "../../../lib/supabase";
+import { CATEGORIES } from "../../../lib/steps";
+
+const VALID_CATEGORIES = CATEGORIES.map((c) => c.key);
 
 export async function GET(request, { params }) {
   try {
@@ -30,11 +33,19 @@ export async function GET(request, { params }) {
 export async function PUT(request, { params }) {
   try {
     const { id } = await params;
-    const { name, steps } = await request.json();
+    const { name, steps, category, description } = await request.json();
+
+    if (category !== undefined && !VALID_CATEGORIES.includes(category)) {
+      return NextResponse.json({ error: "invalid category" }, { status: 400 });
+    }
+
+    const patch = { name, steps, updated_at: new Date().toISOString() };
+    if (category !== undefined) patch.category = category;
+    if (description !== undefined) patch.description = description;
 
     const { error } = await supabase
       .from("tactics")
-      .update({ name, steps, updated_at: new Date().toISOString() })
+      .update(patch)
       .eq("id", id);
 
     if (error) throw error;

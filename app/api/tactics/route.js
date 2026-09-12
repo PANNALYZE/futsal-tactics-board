@@ -1,17 +1,22 @@
 import { NextResponse } from "next/server";
 import { supabase } from "../../lib/supabase";
+import { CATEGORIES } from "../../lib/steps";
 
 const MAX_TACTICS = 20;
+const VALID_CATEGORIES = CATEGORIES.map((c) => c.key);
 
 export async function POST(request) {
   try {
-    const { name, steps } = await request.json();
+    const { name, steps, category = "other", description = "" } = await request.json();
 
     if (!name || !steps || !Array.isArray(steps)) {
       return NextResponse.json(
         { error: "name and steps are required" },
         { status: 400 }
       );
+    }
+    if (!VALID_CATEGORIES.includes(category)) {
+      return NextResponse.json({ error: "invalid category" }, { status: 400 });
     }
 
     // Check limit
@@ -28,7 +33,7 @@ export async function POST(request) {
 
     const { data, error } = await supabase
       .from("tactics")
-      .insert({ name, steps })
+      .insert({ name, steps, category, description })
       .select("id, name")
       .single();
 
@@ -47,7 +52,7 @@ export async function GET() {
   try {
     const { data, error } = await supabase
       .from("tactics")
-      .select("id, name, created_at")
+      .select("id, name, category, created_at")
       .order("created_at", { ascending: false });
 
     if (error) throw error;
