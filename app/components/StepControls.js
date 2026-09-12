@@ -5,6 +5,7 @@ export default function StepControls({
   currentStep,
   onSelectStep,
   onAddStep,
+  onUpdateStep,
   onDeleteStep,
   onPlay,
   onReset,
@@ -61,11 +62,18 @@ export default function StepControls({
           {isAnimating ? "再生中..." : "▶ 再生"}
         </button>
         <button
+          className="action-btn update-btn"
+          onClick={onUpdateStep}
+          disabled={isAnimating || !hasStep}
+        >
+          ✔ 更新
+        </button>
+        <button
           className={`action-btn arrow-btn ${showArrows ? "on" : ""}`}
           onClick={onToggleArrows}
           disabled={isAnimating}
         >
-          {showArrows ? "矢印 ON" : "矢印 OFF"}
+          {showArrows ? "矢印" : "矢印✕"}
         </button>
         <button
           className="action-btn delete-btn"
@@ -143,8 +151,12 @@ export default function StepControls({
         .play-btn {
           background: #059669;
         }
+        .update-btn {
+          background: #2563eb;
+        }
         .arrow-btn {
           background: #4b5563;
+          flex: 0.8;
         }
         .arrow-btn.on {
           background: #d97706;

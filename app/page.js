@@ -70,6 +70,14 @@ export default function Home() {
     setCurrentStep(null);
   }, [players]);
 
+  const handleUpdateStep = useCallback(() => {
+    // 選択中ステップの配置を、今の画面の配置で置き換える
+    if (currentStep === null) return;
+    setSteps((prev) =>
+      prev.map((s, i) => (i === currentStep ? { ...s, players: clonePlayers(players) } : s))
+    );
+  }, [currentStep, players]);
+
   const handleDeleteStep = useCallback(
     (index) => {
       if (steps.length <= 0 || index === null) return;
@@ -167,6 +175,7 @@ export default function Home() {
           currentStep={currentStep}
           onSelectStep={handleSelectStep}
           onAddStep={handleAddStep}
+          onUpdateStep={handleUpdateStep}
           onDeleteStep={handleDeleteStep}
           onPlay={handlePlay}
           onReset={handleReset}
