@@ -1,26 +1,15 @@
 "use client";
 
+import { curveSamples } from "../lib/paths";
+
 // Court の SVG（viewBox 200x400）内に描く。% 座標 → x*2, y*4
 const toSvg = ({ x, y }) => ({ x: x * 2, y: y * 4 });
 
-// 折れ線を Catmull-Rom → 3次ベジェでなめらかな path d にする
-function smoothPathD(points) {
-  const pts = points.map(toSvg);
-  if (pts.length < 2) return "";
-  let d = `M ${pts[0].x} ${pts[0].y}`;
-  if (pts.length === 2) return `${d} L ${pts[1].x} ${pts[1].y}`;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[i - 1] || pts[i];
-    const p1 = pts[i];
-    const p2 = pts[i + 1];
-    const p3 = pts[i + 2] || p2;
-    const c1x = p1.x + (p2.x - p0.x) / 6;
-    const c1y = p1.y + (p2.y - p0.y) / 6;
-    const c2x = p2.x - (p3.x - p1.x) / 6;
-    const c2y = p2.y - (p3.y - p1.y) / 6;
-    d += ` C ${c1x} ${c1y}, ${c2x} ${c2y}, ${p2.x} ${p2.y}`;
-  }
-  return d;
+// 表示も再生と同じ曲線サンプル（curveSamples）を使う
+function curvePathD(points) {
+  const pts = curveSamples(points).map(toSvg);
+  if (pts.length === 0) return "";
+  return pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
 }
 
 // 矢印の色はマーカー（味方=青、相手=赤、ボール=白）に合わせる
@@ -62,7 +51,7 @@ export default function MovementArrows({ arrows }) {
           // 軌跡の始点・終点は前後ステップの選手位置に合わせる
           // （ステップ更新で位置がずれても矢印が選手から生えるように）
           const pts = [a.from, ...a.path.slice(1, -1), a.to];
-          return <path key={a.id} d={smoothPathD(pts)} {...common} />;
+          return <path key={a.id} d={curvePathD(pts)} {...common} />;
         }
         const from = toSvg(a.from);
         const to = toSvg(a.to);

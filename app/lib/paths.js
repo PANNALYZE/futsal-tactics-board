@@ -4,7 +4,9 @@
 const MIN_STEP_DISTANCE = 1.0;
 // 保存時の上限点数と Douglas-Peucker の許容誤差（%）
 export const MAX_PATH_POINTS = 40;
-const BASE_TOLERANCE = 0.8;
+const BASE_TOLERANCE = 1.5;
+// 手ブレ除去の移動平均の窓幅（奇数）
+const SMOOTH_WINDOW = 5;
 
 export function appendPoint(path, point) {
   if (path.length === 0) return [point];
@@ -41,6 +43,46 @@ function douglasPeucker(points, tolerance) {
   const left = douglasPeucker(points.slice(0, index + 1), tolerance);
   const right = douglasPeucker(points.slice(index), tolerance);
   return [...left.slice(0, -1), ...right];
+}
+
+// 移動平均で手ブレを取り、Douglas-Peucker で要点だけ残す（始点・終点は固定）
+export function smoothPath(path) {
+  if (path.length < 3) return path;
+  const half = Math.floor(SMOOTH_WINDOW / 2);
+  const averaged = path.map((p, i) => {
+    if (i === 0 || i === path.length - 1) return p;
+    const lo = Math.max(0, i - half);
+    const hi = Math.min(path.length - 1, i + half);
+    const win = path.slice(lo, hi + 1);
+    return {
+      x: win.reduce((a, q) => a + q.x, 0) / win.length,
+      y: win.reduce((a, q) => a + q.y, 0) / win.length,
+    };
+  });
+  return simplifyPath(averaged);
+}
+
+// 折れ線を Catmull-Rom 曲線で細分化した点列にする（表示と再生で同じ曲線を使う）
+export function curveSamples(points, subdivisions = 8) {
+  if (points.length < 3) return points;
+  const out = [points[0]];
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i - 1] || points[i];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[i + 2] || p2;
+    for (let k = 1; k <= subdivisions; k++) {
+      const t = k / subdivisions;
+      const t2 = t * t;
+      const t3 = t2 * t;
+      out.push({
+        x: 0.5 * (2 * p1.x + (-p0.x + p2.x) * t + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3),
+        y: 0.5 * (2 * p1.y + (-p0.y + p2.y) * t + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3),
+      });
+    }
+  }
+  out[out.length - 1] = points[points.length - 1];
+  return out;
 }
 
 export function simplifyPath(path) {

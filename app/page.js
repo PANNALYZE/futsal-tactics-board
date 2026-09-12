@@ -8,9 +8,15 @@ import CloudControls from "./components/CloudControls";
 import { INITIAL_PLAYERS } from "./lib/initialPlayers";
 import { normalizeSteps, createStep } from "./lib/steps";
 import { movementArrows } from "./lib/arrows";
-import { appendPoint, simplifyPath } from "./lib/paths";
+import { appendPoint, smoothPath } from "./lib/paths";
+import { interpolatePlayers } from "./lib/animate";
 
-const PLAY_INTERVAL_MS = 1200;
+// 再生: 1ステップの移動にかける時間と、到着後に止まる時間
+const MOVE_MS = 1000;
+const HOLD_MS = 300;
+
+// 動き出しと到着をなめらかにする（ease-in-out）
+const easeInOut = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
 
 // 保存する軌跡の座標は小数1桁に丸める（JSON の肥大化防止）
 function roundPoint({ x, y }) {
@@ -83,7 +89,7 @@ export default function Home() {
 
   const takeDragPaths = useCallback(() => {
     const paths = Object.fromEntries(
-      Object.entries(dragPaths.current).map(([id, path]) => [id, simplifyPath(path).map(roundPoint)])
+      Object.entries(dragPaths.current).map(([id, path]) => [id, smoothPath(path).map(roundPoint)])
     );
     dragPaths.current = {};
     return paths;
@@ -154,19 +160,33 @@ export default function Home() {
     setCurrentStep(0);
     setPlayers(clonePlayers(steps[0].players));
 
-    let stepIndex = 0;
-    const playNext = () => {
-      stepIndex++;
-      if (stepIndex < steps.length) {
-        setCurrentStep(stepIndex);
-        setPlayers(clonePlayers(steps[stepIndex].players));
-        setTimeout(playNext, PLAY_INTERVAL_MS);
-      } else {
-        setIsAnimating(false);
-      }
-    };
+    // ステップ間を requestAnimationFrame で補間し、軌跡があればそれに沿って動かす
+    const animateTo = (index) =>
+      new Promise((resolve) => {
+        const from = steps[index - 1].players;
+        const to = steps[index];
+        const start = performance.now();
+        const frame = (now) => {
+          const t = Math.min(1, (now - start) / MOVE_MS);
+          setPlayers(interpolatePlayers(from, to.players, to.paths, easeInOut(t)));
+          if (t < 1) {
+            requestAnimationFrame(frame);
+          } else {
+            setPlayers(clonePlayers(to.players));
+            setTimeout(resolve, HOLD_MS);
+          }
+        };
+        requestAnimationFrame(frame);
+      });
 
-    setTimeout(playNext, PLAY_INTERVAL_MS);
+    (async () => {
+      await new Promise((r) => setTimeout(r, HOLD_MS));
+      for (let i = 1; i < steps.length; i++) {
+        setCurrentStep(i);
+        await animateTo(i);
+      }
+      setIsAnimating(false);
+    })();
   }, [steps, isAnimating]);
 
   const handleReset = useCallback(() => {

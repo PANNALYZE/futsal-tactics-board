@@ -72,7 +72,8 @@ export default function Player({ player, onDrag, isAnimating }) {
         left: `${player.x}%`,
         top: `${player.y}%`,
         backgroundColor: bgColor,
-        transition: isAnimating ? "left 1s ease, top 1s ease" : "none",
+        // 再生中はフレームごとに位置を更新するので CSS transition は使わない
+        transition: "none",
         cursor: isAnimating ? "default" : "grab",
       }}
     >

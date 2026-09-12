@@ -36,3 +36,34 @@ describe("simplifyPath", () => {
     expect(simplifyPath([{ x: 1, y: 1 }])).toEqual([{ x: 1, y: 1 }]);
   });
 });
+
+import { smoothPath, curveSamples } from "./paths";
+
+describe("smoothPath", () => {
+  it("手ブレ（ジグザグ）をならし、始点と終点は変えない", () => {
+    const zig = Array.from({ length: 21 }, (_, i) => ({ x: i * 2, y: i % 2 ? 3 : 0 }));
+    const out = smoothPath(zig);
+    expect(out[0]).toEqual(zig[0]);
+    expect(out[out.length - 1]).toEqual(zig[zig.length - 1]);
+    const maxDev = Math.max(...out.slice(1, -1).map((p) => Math.abs(p.y - 1.5)));
+    expect(maxDev).toBeLessThan(1.5);
+    expect(out.length).toBeLessThan(zig.length);
+  });
+  it("2点以下はそのまま", () => {
+    const two = [{ x: 0, y: 0 }, { x: 5, y: 5 }];
+    expect(smoothPath(two)).toEqual(two);
+  });
+});
+
+describe("curveSamples", () => {
+  const pts = [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }];
+  it("始点と終点を通り、区間ごとに細分化される", () => {
+    const out = curveSamples(pts, 4);
+    expect(out[0]).toEqual({ x: 0, y: 0 });
+    expect(out[out.length - 1]).toEqual({ x: 10, y: 10 });
+    expect(out).toHaveLength(2 * 4 + 1);
+  });
+  it("2点なら直線の2点のまま", () => {
+    expect(curveSamples(pts.slice(0, 2), 4)).toEqual(pts.slice(0, 2));
+  });
+});
