@@ -8,8 +8,14 @@ import CloudControls from "./components/CloudControls";
 import { INITIAL_PLAYERS } from "./lib/initialPlayers";
 import { normalizeSteps, createStep } from "./lib/steps";
 import { movementArrows } from "./lib/arrows";
+import { appendPoint, simplifyPath } from "./lib/paths";
 
 const PLAY_INTERVAL_MS = 1200;
+
+// 保存する軌跡の座標は小数1桁に丸める（JSON の肥大化防止）
+function roundPoint({ x, y }) {
+  return { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 };
+}
 
 function clonePlayers(players) {
   return players.map((p) => ({ ...p }));
@@ -26,10 +32,16 @@ export default function Home() {
   // 読み込み中の戦術（id/name/category/description）。上書き保存用
   const [loadedTactic, setLoadedTactic] = useState(null);
   const courtRef = useRef(null);
+  // ステップ選択後にドラッグした軌跡（playerId -> [{x,y}]）。+ / 更新 で次ステップに保存する
+  const dragPaths = useRef({});
+  // handlePlayerMove から最新の配置を読むための参照
+  const playersRef = useRef(players);
+  playersRef.current = players;
 
   const applyLoaded = useCallback((rawSteps, meta) => {
     const normalized = normalizeSteps(rawSteps);
     if (normalized.length === 0) return;
+    dragPaths.current = {};
     setSteps(normalized);
     setLoadedTactic(meta);
     setPlayers(clonePlayers(normalized[0].players));
@@ -58,30 +70,53 @@ export default function Home() {
 
   const handlePlayerMove = useCallback((playerId, x, y) => {
     // ドラッグ中は画面上の位置だけ更新。記録済みステップは触らない
+    const current = playersRef.current.find((p) => p.id === playerId);
+    if (current) {
+      // 軌跡: 最初の移動時はドラッグ前の位置を起点にする
+      const path = dragPaths.current[playerId] ?? [{ x: current.x, y: current.y }];
+      dragPaths.current[playerId] = appendPoint(path, { x, y });
+    }
     setPlayers((prev) =>
       prev.map((p) => (p.id === playerId ? { ...p, x, y } : p))
     );
   }, []);
 
+  const takeDragPaths = useCallback(() => {
+    const paths = Object.fromEntries(
+      Object.entries(dragPaths.current).map(([id, path]) => [id, simplifyPath(path).map(roundPoint)])
+    );
+    dragPaths.current = {};
+    return paths;
+  }, []);
+
   const handleAddStep = useCallback(() => {
-    // 「+」を押した瞬間の配置をスナップショットとして保存
-    setSteps((prev) => [...prev, createStep(players)]);
+    // 「+」を押した瞬間の配置と、そこまでのドラッグ軌跡をスナップショットとして保存
+    const paths = takeDragPaths();
+    setSteps((prev) => [...prev, createStep(players, "", paths)]);
     // 記録後はフリー編集モード（ステップ選択を解除）
     setCurrentStep(null);
-  }, [players]);
+  }, [players, takeDragPaths]);
 
   const handleUpdateStep = useCallback(() => {
     // 選択中ステップの配置を、今の画面の配置で置き換える
     if (currentStep === null) return;
+    const paths = takeDragPaths();
     setSteps((prev) =>
-      prev.map((s, i) => (i === currentStep ? { ...s, players: clonePlayers(players) } : s))
+      prev.map((s, i) =>
+        i === currentStep
+          ? { ...s, players: clonePlayers(players), paths: { ...s.paths, ...paths } }
+          : s
+      )
     );
-  }, [currentStep, players]);
+  }, [currentStep, players, takeDragPaths]);
 
   const handleDeleteStep = useCallback(
     (index) => {
       if (steps.length <= 0 || index === null) return;
-      const newSteps = steps.filter((_, i) => i !== index);
+      const newSteps = steps
+        .filter((_, i) => i !== index)
+        .map((s, i) => (i === index ? { ...s, paths: {} } : s));
+      dragPaths.current = {};
       setSteps(newSteps);
       if (newSteps.length === 0) {
         setCurrentStep(null);
@@ -97,6 +132,7 @@ export default function Home() {
   const handleSelectStep = useCallback(
     (index) => {
       if (index < 0 || index >= steps.length) return;
+      dragPaths.current = {};
       setCurrentStep(index);
       setPlayers(clonePlayers(steps[index].players));
     },
@@ -113,6 +149,7 @@ export default function Home() {
 
   const handlePlay = useCallback(() => {
     if (steps.length < 2 || isAnimating) return;
+    dragPaths.current = {};
     setIsAnimating(true);
     setCurrentStep(0);
     setPlayers(clonePlayers(steps[0].players));
@@ -133,6 +170,7 @@ export default function Home() {
   }, [steps, isAnimating]);
 
   const handleReset = useCallback(() => {
+    dragPaths.current = {};
     setPlayers(clonePlayers(INITIAL_PLAYERS));
     setSteps([]);
     setCurrentStep(null);
@@ -143,7 +181,7 @@ export default function Home() {
   const arrows = useMemo(() => {
     if (!showArrows || isAnimating || currentStep === null) return [];
     const next = steps[currentStep + 1];
-    return next ? movementArrows(players, next.players) : [];
+    return next ? movementArrows(players, next.players, next.paths) : [];
   }, [showArrows, isAnimating, currentStep, steps, players]);
 
   const memo = currentStep !== null && steps[currentStep] ? steps[currentStep].memo : "";

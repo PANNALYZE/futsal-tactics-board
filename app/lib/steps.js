@@ -1,4 +1,5 @@
-// ステップは { players: [...], memo: "" } の配列。
+// ステップは { players: [...], memo: "", paths: { [playerId]: [{x,y},...] } } の配列。
+// paths は「前のステップからこのステップへ動いたときの軌跡」。
 // 旧データ（選手配列の配列）は normalizeSteps で読み込み時に変換する。
 
 export const CATEGORIES = [
@@ -17,17 +18,21 @@ function clonePlayers(players) {
   return players.map((p) => ({ ...p }));
 }
 
-export function createStep(players, memo = "") {
-  return { players: clonePlayers(players), memo };
+export function createStep(players, memo = "", paths = {}) {
+  return { players: clonePlayers(players), memo, paths };
+}
+
+function normalizePaths(paths) {
+  return paths && typeof paths === "object" && !Array.isArray(paths) ? paths : {};
 }
 
 export function normalizeSteps(raw) {
   if (!Array.isArray(raw)) return [];
   return raw
     .map((step) => {
-      if (Array.isArray(step)) return { players: step, memo: "" };
+      if (Array.isArray(step)) return { players: step, memo: "", paths: {} };
       if (step && Array.isArray(step.players)) {
-        return { players: step.players, memo: step.memo ?? "" };
+        return { players: step.players, memo: step.memo ?? "", paths: normalizePaths(step.paths) };
       }
       return null;
     })
